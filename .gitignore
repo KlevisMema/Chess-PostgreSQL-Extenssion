@@ -1,0 +1,9 @@
+# Compiled source #
+###################
+*.o
+*.so
+*.bc
+
+# IDE specific files #
+######################
+.vscode/
