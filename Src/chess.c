@@ -185,10 +185,14 @@ Datum get_board_state(PG_FUNCTION_ARGS) {
 
     gameTruncated = truncate_san(game, half_moves); 
 
+    ereport(INFO, (errmsg("San truncated : %s", gameTruncated->data)));
+
     if (gameTruncated == NULL)
         ereport(ERROR, (errmsg("Game is incomplete or shorter than the requested number of half-moves")));
 
     fenConversionStrResult = san_to_fan(gameTruncated);
+
+    ereport(INFO, (errmsg("San truncated : %s", fenConversionStrResult)));
     
     if (fenConversionStrResult == NULL) {
         ereport(ERROR, (errmsg("No FEN result returned from mapping san to fen")));

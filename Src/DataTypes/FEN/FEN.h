@@ -14,7 +14,7 @@
 #ifndef FEN_H
 #define FEN_H
 
-#define MAX_FEN_LENGTH 65
+#define MAX_FEN_LENGTH 69
 
 //---------------------------------------------------------------------DATA TYPE DECLARATION--------------------------------------------------------------------//
 

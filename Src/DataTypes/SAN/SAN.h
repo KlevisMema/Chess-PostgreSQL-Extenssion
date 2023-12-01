@@ -117,7 +117,7 @@ char *skipCommentsAndAnnotations(char *str) {
  *         Returns NULL if the game is shorter than the requested number of half-moves.
  */
 SAN *truncate_san(SAN *inputGame , int nHalfMoves) {
-     SAN *resultGame = (SAN *) palloc(sizeof(SAN)); // Allocate memory for the result SAN structure.
+    SAN *resultGame = (SAN *) palloc(sizeof(SAN)); // Allocate memory for the result SAN structure.
     int halfMoveCount = 0; // Counter for the number of half-moves processed.
     char *token, *rest, *inputCopy; // Pointers for string tokenization.
     bool isMoveNumber; // Flag to check if the token is a move number.
