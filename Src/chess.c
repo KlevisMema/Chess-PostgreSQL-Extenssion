@@ -27,10 +27,12 @@
 Datum san_in(PG_FUNCTION_ARGS)
 {
     SAN *result;
-    char *pgn_str = PG_GETARG_CSTRING(0);
+    char *pgn_str;
 
-    if (pgn_str == NULL)
-        ereport(ERROR,(errmsg("san_in: Null PGN string")));
+    if (PG_ARGISNULL(0))
+        ereport(ERROR, (errmsg("san_in: Argument(0) is null")));
+
+    pgn_str = PG_GETARG_CSTRING(0);
 
     result = (SAN *) palloc(sizeof(SAN));
 
@@ -50,11 +52,13 @@ Datum san_in(PG_FUNCTION_ARGS)
  */
 Datum san_out(PG_FUNCTION_ARGS)
 {
+    SAN *game;
     char *result;
-    SAN *game = PG_GETARG_CHESSGAME_P(0);
 
-    if (game == NULL)
-        ereport(ERROR,(errmsg("san_out: input game is NULL")));
+    if (PG_ARGISNULL(0))
+        ereport(ERROR, (errmsg("san_out: Argument(0) is null")));
+
+    game = PG_GETARG_CHESSGAME_P(0);
 
     parsePGN_ToStr(game, &result);
 
@@ -72,8 +76,13 @@ Datum san_out(PG_FUNCTION_ARGS)
  */
 Datum fen_in(PG_FUNCTION_ARGS)
 {
-    char *str = PG_GETARG_CSTRING(0);
+    char *str;
     FEN *result;
+
+    if (PG_ARGISNULL(0))
+        ereport(ERROR, (errmsg("fen_in: Argument(0) is null")));
+
+    str = PG_GETARG_CSTRING(0);
 
     if (!isValidFEN(str))
         ereport(ERROR,
@@ -98,9 +107,15 @@ Datum fen_in(PG_FUNCTION_ARGS)
  */
 Datum fen_out(PG_FUNCTION_ARGS)
 {
-    FEN *cb = (FEN *)PG_GETARG_POINTER(0);
+    FEN *cb;
+    char* result;
 
-    char* result = parseFEN_ToStr(cb);
+    if (PG_ARGISNULL(0))
+        ereport(ERROR, (errmsg("fen_out: Argument(0) is null")));
+
+    cb = (FEN *)PG_GETARG_POINTER(0);
+
+    result = parseFEN_ToStr(cb);
 
     PG_RETURN_CSTRING(pstrdup(result));
 }
@@ -117,11 +132,13 @@ Datum fen_out(PG_FUNCTION_ARGS)
 Datum has_opening(PG_FUNCTION_ARGS) 
 {
     int opening_length;
-    SAN* game1 = (SAN*)PG_GETARG_POINTER(0);
-    SAN* game2 = (SAN*)PG_GETARG_POINTER(1);
+    SAN *game1, *game2;
 
-    if (game1 == NULL || game2 == NULL)
-        ereport(ERROR,(errmsg("One or both of the game inputs are NULL")));
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+        ereport(ERROR, (errmsg("has_opening: One of the arguments is null")));
+
+    game1 = (SAN*)PG_GETARG_POINTER(0);
+    game2 = (SAN*)PG_GETARG_POINTER(1);
 
     opening_length = strlen(game2->data);
 
@@ -142,12 +159,14 @@ Datum has_opening(PG_FUNCTION_ARGS)
  */
 Datum get_FirstMoves(PG_FUNCTION_ARGS) 
 {
-    SAN *result;
-    SAN *inputGame = (SAN *) PG_GETARG_POINTER(0);
-    int nHalfMoves = PG_GETARG_INT32(1);
+    SAN *result, *inputGame;
+    int nHalfMoves;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+        ereport(ERROR, (errmsg("get_FirstMoves: One of the arguments is null")));
    
-    if (inputGame == NULL)
-        ereport(ERROR,(errmsg("get_FirstMoves: input game is NULL")));
+    inputGame = (SAN *) PG_GETARG_POINTER(0);
+    nHalfMoves = PG_GETARG_INT32(1);
 
     if (nHalfMoves < 0) 
         ereport(ERROR,(errmsg("get_FirstMoves: Non-positive number of half moves")));
@@ -171,14 +190,16 @@ Datum get_FirstMoves(PG_FUNCTION_ARGS)
  */
 Datum get_board_state(PG_FUNCTION_ARGS) {
     FEN *fen;
-    SAN *gameTruncated;
-    SAN *game = (SAN *) PG_GETARG_POINTER(0);
+    SAN *gameTruncated, *game;
 
+    int half_moves;
     const char *fenConversionStrResult;
-    int half_moves = PG_GETARG_INT32(1);
 
-    if (game == NULL)
-        ereport(ERROR, (errmsg("get_board_state: input game is NULL")));
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+        ereport(ERROR, (errmsg("get_board_state: One of the arguments is null")));
+
+    game = (SAN *) PG_GETARG_POINTER(0);
+    half_moves = PG_GETARG_INT32(1);
 
     if (half_moves < 0) 
         ereport(ERROR,(errmsg("get_board_state: Non-positive number of half moves")));
@@ -211,20 +232,19 @@ Datum get_board_state(PG_FUNCTION_ARGS) {
  * @return True if the game contains the given board state within the first N half-moves; false otherwise.
  */
 Datum has_Board(PG_FUNCTION_ARGS){
-    FEN *current_board;
-    SAN *gameTruncated;
-    SAN* input_game = (SAN*) PG_GETARG_POINTER(0);
-    FEN* input_board = (FEN*) PG_GETARG_POINTER(1);
+    FEN *current_board, *input_board;
+    SAN *gameTruncated, *input_game;
 
+    int input_half_moves;
     bool positions_match;
     const char *fenConversionStrResult;
-    int input_half_moves = PG_GETARG_INT32(2);
 
-    if (input_game == NULL)
-        ereport(ERROR, (errmsg("hasBoard: input game is NULL")));
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
+        ereport(ERROR, (errmsg("has_Board: One of the arguments is null")));
 
-    if (input_board == NULL)
-        ereport(ERROR, (errmsg("hasBoard: input board is NULL")));
+    input_game = (SAN*) PG_GETARG_POINTER(0);
+    input_board = (FEN*) PG_GETARG_POINTER(1);
+    input_half_moves = PG_GETARG_INT32(2);
 
     if (input_half_moves < 0) 
         ereport(ERROR,(errmsg("hasBoard: Non-positive number of half moves")));
@@ -247,4 +267,145 @@ Datum has_Board(PG_FUNCTION_ARGS){
     positions_match = strcmp(input_board->positions, current_board->positions) == 0;
 
     PG_RETURN_BOOL(positions_match);
+}
+/**
+ * Compares two SAN types for equality.
+ *
+ * Determines if the game notations of two SAN types are equal up to the first MAX_PGN_LENGTH characters.
+ *
+ * @param fcinfo Function call info containing arguments.
+ * @return Boolean value - true if the two SAN types are equal; false otherwise.
+ */
+Datum san_eq(PG_FUNCTION_ARGS) {
+    SAN *san1, *san2;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+        ereport(ERROR, (errmsg("san_eq: One of the arguments is null")));
+
+    san1 = (SAN *) PG_GETARG_POINTER(0);
+    san2 = (SAN *) PG_GETARG_POINTER(1);
+
+    PG_RETURN_BOOL(strncmp(san1->data, san2->data, MAX_PGN_LENGTH) == 0);
+}
+/**
+ * Compares two SAN types to determine if the first is less than the second.
+ *
+ * Compares the game notations of two SAN types up to the first MAX_PGN_LENGTH characters.
+ *
+ * @param fcinfo Function call info containing arguments.
+ * @return Boolean value - true if the first SAN type is less than the second; false otherwise.
+ */
+Datum san_lt(PG_FUNCTION_ARGS) {
+    SAN *san1 , *san2;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+        ereport(ERROR, (errmsg("san_lt: One of the arguments is null")));
+
+    san1 = (SAN *) PG_GETARG_POINTER(0);
+    san2 = (SAN *) PG_GETARG_POINTER(1);
+
+    PG_RETURN_BOOL(strncmp(san1->data, san2->data, MAX_PGN_LENGTH) < 0);
+}
+/**
+ * Compares two SAN types to determine if the first is greater than the second.
+ *
+ * Compares the game notations of two SAN types up to the first MAX_PGN_LENGTH characters.
+ *
+ * @param fcinfo Function call info containing arguments.
+ * @return Boolean value - true if the first SAN type is greater than the second; false otherwise.
+ */
+Datum san_gt(PG_FUNCTION_ARGS) {
+    SAN *san1, *san2;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+        ereport(ERROR, (errmsg("san_gt: One of the arguments is null")));
+
+    san1 = (SAN *) PG_GETARG_POINTER(0);
+    san2 = (SAN *) PG_GETARG_POINTER(1);
+
+    PG_RETURN_BOOL(strncmp(san1->data, san2->data, MAX_PGN_LENGTH) > 0);
+}
+/**
+ * Compares two SAN types.
+ *
+ * Returns an integer indicating the relationship between two SAN types based on their game notations.
+ * The comparison is up to the first MAX_PGN_LENGTH characters.
+ *
+ * @param fcinfo Function call info containing arguments.
+ * @return Integer less than, equal to, or greater than zero if the first SAN is found,
+ * respectively, to be less than, to match, or be greater than the second SAN.
+ */
+Datum san_cmp(PG_FUNCTION_ARGS) {
+    SAN *san1, *san2;
+
+    int cmp;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+        ereport(ERROR, (errmsg("san_cmp: One of the arguments is null")));
+
+    san1 = (SAN *) PG_GETARG_POINTER(0);
+    san2 = (SAN *) PG_GETARG_POINTER(1);
+
+    cmp = strncmp(san1->data, san2->data, MAX_PGN_LENGTH);
+    PG_RETURN_INT32(cmp);
+}
+/**
+ * Determines if a SAN type matches a given pattern using the LIKE operation.
+ *
+ * Compares a SAN type's game notation to a text pattern. Useful for pattern matching operations in queries.
+ *
+ * @param fcinfo Function call info containing arguments.
+ * @return Boolean value - true if the SAN type matches the pattern; false otherwise.
+ */
+Datum san_like(PG_FUNCTION_ARGS)
+{
+    SAN *san;
+    text *pattern, *san_text;
+
+    bool result;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+        ereport(ERROR, (errmsg("san_like: One of the arguments is null")));
+
+    san = (SAN *) PG_GETARG_POINTER(0);
+    pattern = PG_GETARG_TEXT_PP(1);
+    san_text = cstring_to_text(san->data);
+
+    result = DatumGetBool(DirectFunctionCall2(textlike, 
+                                                   PointerGetDatum(san_text), 
+                                                   PointerGetDatum(pattern)));
+
+    pfree(san_text);
+
+    PG_RETURN_BOOL(result);
+}
+/**
+ * Determines if a SAN type does not match a given pattern using the NOT LIKE operation.
+ *
+ * Compares a SAN type's game notation to a text pattern and returns the opposite of the LIKE operation result.
+ *
+ * @param fcinfo Function call info containing arguments.
+ * @return Boolean value - true if the SAN type does not match the pattern; false otherwise.
+ */
+Datum san_not_like(PG_FUNCTION_ARGS)
+{
+    SAN *san;
+    text *pattern, *san_text;
+
+    bool like_result;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+        ereport(ERROR, (errmsg("san_not_like: One of the arguments is null")));
+    
+    san = (SAN *) PG_GETARG_POINTER(0);
+    pattern = PG_GETARG_TEXT_PP(1);
+    san_text = cstring_to_text(san->data);
+
+    like_result = DatumGetBool(DirectFunctionCall2(textlike, 
+                                                        PointerGetDatum(san_text), 
+                                                        PointerGetDatum(pattern)));
+
+    pfree(san_text);
+
+    PG_RETURN_BOOL(!like_result);
 }

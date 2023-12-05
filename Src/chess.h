@@ -27,6 +27,8 @@
 
 PG_MODULE_MAGIC;
 
+/* Chess datatypes */
+
 PG_FUNCTION_INFO_V1(san_in);
 Datum san_in(PG_FUNCTION_ARGS);
 
@@ -39,6 +41,8 @@ Datum fen_in(PG_FUNCTION_ARGS);
 PG_FUNCTION_INFO_V1(fen_out);
 Datum fen_out(PG_FUNCTION_ARGS);
 
+/* Chess Functions */
+
 PG_FUNCTION_INFO_V1(has_Board);
 Datum has_Board(PG_FUNCTION_ARGS);
 
@@ -50,5 +54,25 @@ Datum get_FirstMoves(PG_FUNCTION_ARGS);
 
 PG_FUNCTION_INFO_V1(get_board_state);
 Datum get_board_state(PG_FUNCTION_ARGS);
+
+/* Chess Indexes (BTree) */
+
+PG_FUNCTION_INFO_V1(san_eq);
+Datum san_eq(PG_FUNCTION_ARGS);
+
+PG_FUNCTION_INFO_V1(san_lt);
+Datum san_lt(PG_FUNCTION_ARGS);
+
+PG_FUNCTION_INFO_V1(san_gt);
+Datum san_gt(PG_FUNCTION_ARGS);
+
+PG_FUNCTION_INFO_V1(san_cmp);
+Datum san_cmp(PG_FUNCTION_ARGS);
+
+PG_FUNCTION_INFO_V1(san_like);
+Datum san_like(PG_FUNCTION_ARGS);
+
+PG_FUNCTION_INFO_V1(san_not_like);
+Datum san_not_like(PG_FUNCTION_ARGS);
 
 #endif // CHESS_H
