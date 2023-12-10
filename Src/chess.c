@@ -441,8 +441,16 @@ Datum san_not_like(PG_FUNCTION_ARGS)
 
     PG_RETURN_BOOL(!like_result);
 }
-
-
+/**
+ * Extracts FEN strings from a SAN type for each half-move up to the end of the game.
+ * 
+ * This function iterates over each half-move in a SAN representation of a chess game,
+ * truncates the game at each half-move, converts it to FEN format, and accumulates
+ * these FEN strings into an array.
+ *
+ * @param fcinfo Function call info containing arguments.
+ * @return Pointer to an array of Datum, each containing a FEN string; or NULL if no moves are available.
+ */
 Datum fens_from_san(PG_FUNCTION_ARGS){
     int32 *nkeys;
     ArrayBuildState *astate;
@@ -491,7 +499,15 @@ Datum fens_from_san(PG_FUNCTION_ARGS){
         PG_RETURN_NULL();
     }
 }
-
+/**
+ * Compares two text values for GIN indexing, specifically for chess game keys.
+ * 
+ * This function is used in the context of GIN index operations to compare two keys
+ * (text values) and determine their ordering.
+ *
+ * @param fcinfo Function call info containing arguments.
+ * @return Integer representing the comparison result: -1, 0, or 1.
+ */
 Datum gin_compare(PG_FUNCTION_ARGS)
 {
     text *key1 = PG_GETARG_TEXT_PP(0);
@@ -511,7 +527,15 @@ Datum gin_compare(PG_FUNCTION_ARGS)
 
     PG_RETURN_INT32(result);
 }
-
+/**
+ * Extracts indexable keys from a SAN type for GIN indexing.
+ * 
+ * This function is used for GIN index operations. It extracts FEN representations
+ * from a given SAN type and prepares them as keys for indexing.
+ *
+ * @param fcinfo Function call info containing arguments.
+ * @return Pointer to an array of keys (Datum) for GIN indexing.
+ */
 Datum gin_extract_value(PG_FUNCTION_ARGS) {
 
     SAN *san;
@@ -539,7 +563,15 @@ Datum gin_extract_value(PG_FUNCTION_ARGS) {
 
     PG_RETURN_POINTER(keys);
 }
-
+/**
+ * Extracts a query key from a FEN type for GIN indexing.
+ * 
+ * Used in GIN index search operations, this function takes a FEN type,
+ * extracts its board position as a key, and prepares it for querying the GIN index.
+ *
+ * @param fcinfo Function call info containing arguments.
+ * @return Pointer to an array of one key (Datum) representing the query.
+ */
 Datum gin_extract_query(PG_FUNCTION_ARGS) {
 
     FEN  *itemValue;
@@ -564,7 +596,15 @@ Datum gin_extract_query(PG_FUNCTION_ARGS) {
 
     PG_RETURN_POINTER(keys);
 }
-
+/**
+ * Checks if indexed keys are consistent with a given query key in GIN index searches.
+ * 
+ * This function is used to determine if a particular GIN index entry matches the search condition,
+ * specifically for chess game positions.
+ *
+ * @param fcinfo Function call info containing arguments.
+ * @return Boolean indicating whether the indexed keys are consistent with the query key.
+ */
 Datum gin_consistent(PG_FUNCTION_ARGS)
 {
     bool *check = (bool *) PG_GETARG_POINTER(0);
@@ -595,7 +635,15 @@ Datum gin_consistent(PG_FUNCTION_ARGS)
     *recheck = true;
     PG_RETURN_BOOL(false);
 }
-
+/**
+ * Performs a ternary consistency check for GIN index operations.
+ * 
+ * This function is used in GIN index searches to return a ternary value (MAYBE, TRUE, FALSE)
+ * indicating the consistency of the index keys with a given query.
+ *
+ * @param fcinfo Function call info containing arguments.
+ * @return GinTernaryValue indicating the consistency result.
+ */
 Datum gin_tri_consistent(PG_FUNCTION_ARGS)
 {
     GinTernaryValue *check = (GinTernaryValue *) PG_GETARG_POINTER(0);
@@ -621,7 +669,15 @@ Datum gin_tri_consistent(PG_FUNCTION_ARGS)
 
     PG_RETURN_GIN_TERNARY_VALUE(result);
 }
-
+/**
+ * Determines if a given FEN type matches any board state in a SAN type.
+ * 
+ * This function iterates through each move of a SAN type, converts it to FEN, and checks
+ * if it matches a given FEN type, representing a specific board state.
+ *
+ * @param fcinfo Function call info containing arguments.
+ * @return Boolean value - true if a matching board state is found; false otherwise.
+ */
 Datum has_board_fn_operator(PG_FUNCTION_ARGS)
 {
     FEN *input_fen, *result_fen;
@@ -666,7 +722,15 @@ Datum has_board_fn_operator(PG_FUNCTION_ARGS)
 
     PG_RETURN_BOOL(result);
 }
-
+/**
+ * Determines if a given FEN type matches any board state in a SAN type.
+ * 
+ * Similar to 'has_board_fn_operator', this function iterates through each move of a SAN type,
+ * converts it to FEN, and checks if it matches the provided FEN type.
+ *
+ * @param fcinfo Function call info containing arguments.
+ * @return Boolean value - true if a matching board state is found; false otherwise.
+ */
 Datum fen_in_san_eq(PG_FUNCTION_ARGS) {
 
     FEN *input_board, *result_fen;
