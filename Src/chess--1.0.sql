@@ -184,38 +184,9 @@ CREATE OPERATOR = (
 
 CREATE OPERATOR CLASS san_gin_ops
 DEFAULT FOR TYPE SAN USING gin AS
-    OPERATOR 3 = (SAN, FEN),
-    OPERATOR 7 @> (SAN, FEN),
+    OPERATOR 1 @> (SAN, FEN),
+    OPERATOR 2 = (SAN, FEN),
     FUNCTION 1 gin_compare(internal, internal),
     FUNCTION 2 gin_extract_value(internal, internal, internal),
     FUNCTION 3 gin_extract_query(internal, internal, internal, internal, internal, internal, internal),
     FUNCTION 4 gin_consistent(internal, internal, internal, internal, internal, internal, internal, internal);
-
-
-/*
-CREATE FUNCTION san_contains_fen(SAN, FEN) 
-  RETURNS boolean
-  AS 'MODULE_PATHNAME', 'san_contains_fen'
-  LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
-
-CREATE FUNCTION decompose_san_to_fen(SAN) 
-  RETURNS text[]
-  AS 'MODULE_PATHNAME', 'decompose_san_to_fen'
-  LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
-
-CREATE FUNCTION extract_query(internal, internal, internal, integer, internal, internal)
-  RETURNS internal
-  AS 'MODULE_PATHNAME', 'extract_query'
-  LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
-
-CREATE OPERATOR @> (
-    LEFTARG = SAN,
-    RIGHTARG = FEN,
-    PROCEDURE = san_contains_fen,
-    COMMUTATOR = '<@'
-);
-
-CREATE OPERATOR CLASS san_gin_ops DEFAULT FOR TYPE SAN USING gin AS
-    OPERATOR 2 @>(san, fen),
-    FUNCTION 2 decompose_san_to_fen(SAN);
-*/

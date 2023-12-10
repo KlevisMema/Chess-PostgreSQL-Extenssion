@@ -267,6 +267,9 @@ Datum has_Board(PG_FUNCTION_ARGS){
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
         ereport(ERROR, (errmsg("has_Board: One of the arguments is null")));
 
+   
+        
+
     input_game = (SAN*) PG_GETARG_POINTER(0);
     input_board = (FEN*) PG_GETARG_POINTER(1);
     input_half_moves = PG_GETARG_INT32(2);
@@ -553,11 +556,11 @@ Datum gin_extract_value(PG_FUNCTION_ARGS) {
     *nkeys = 0;
 
     keys = (Datum *) DirectFunctionCall4Coll(fens_from_san, 
-                                                    PG_GET_COLLATION(), 
-                                                    PointerGetDatum(san),
-                                                    PointerGetDatum(nkeys),
-                                                    BoolGetDatum(false),
-                                                    PointerGetDatum(NULL)); 
+                                            PG_GET_COLLATION(), 
+                                            PointerGetDatum(san),
+                                            PointerGetDatum(nkeys),
+                                            BoolGetDatum(false),
+                                            PointerGetDatum(NULL)); 
 
     *nullFlags = NULL;
 
@@ -690,9 +693,9 @@ Datum has_board_fn_operator(PG_FUNCTION_ARGS)
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
         ereport(ERROR, (errmsg("has_board_fn_operator: One of the arguments is null\n")));
 
+    san = (SAN *) PG_GETARG_CHESSGAME_P(0);
     result_fen = (FEN *)palloc(sizeof(FEN)); 
     input_fen = (FEN *) PG_GETARG_POINTER(1);
-    san = (SAN *) PG_GETARG_CHESSGAME_P(0);
 
     i=0;
     result = false;
