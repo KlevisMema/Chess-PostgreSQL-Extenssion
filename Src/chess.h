@@ -55,13 +55,15 @@ Datum get_FirstMoves(PG_FUNCTION_ARGS);
 PG_FUNCTION_INFO_V1(get_board_state);
 Datum get_board_state(PG_FUNCTION_ARGS);
 
-/* Chess Indexes (BTree) */
+/* B-Tree Index */
 
-PG_FUNCTION_INFO_V1(san_eq);
-Datum san_eq(PG_FUNCTION_ARGS);
+static int san_compare(SAN *a, SAN *b);
 
 PG_FUNCTION_INFO_V1(san_lt);
 Datum san_lt(PG_FUNCTION_ARGS);
+
+PG_FUNCTION_INFO_V1(san_eq);
+Datum san_eq(PG_FUNCTION_ARGS);
 
 PG_FUNCTION_INFO_V1(san_gt);
 Datum san_gt(PG_FUNCTION_ARGS);
@@ -74,5 +76,29 @@ Datum san_like(PG_FUNCTION_ARGS);
 
 PG_FUNCTION_INFO_V1(san_not_like);
 Datum san_not_like(PG_FUNCTION_ARGS);
+
+/* Gin */
+
+PG_FUNCTION_INFO_V1(fens_from_san);
+Datum fens_from_san(PG_FUNCTION_ARGS);
+
+PG_FUNCTION_INFO_V1(gin_compare);
+Datum gin_compare(PG_FUNCTION_ARGS);
+
+PG_FUNCTION_INFO_V1(gin_extract_value);
+Datum gin_extract_value(PG_FUNCTION_ARGS);
+
+PG_FUNCTION_INFO_V1(gin_extract_query);
+Datum gin_extract_query(PG_FUNCTION_ARGS);
+
+PG_FUNCTION_INFO_V1(gin_consistent);
+Datum gin_consistent(PG_FUNCTION_ARGS);
+
+PG_FUNCTION_INFO_V1(gin_tri_consistent);
+Datum gin_tri_consistent(PG_FUNCTION_ARGS);
+
+PG_FUNCTION_INFO_V1(has_board_fn_operator);
+Datum has_board_fn_operator(PG_FUNCTION_ARGS);
+
 
 #endif // CHESS_H

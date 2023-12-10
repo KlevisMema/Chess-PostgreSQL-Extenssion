@@ -64,6 +64,6 @@ def insert_games_to_db(games):
             connection.close()
 
 # Generate and insert game notations
-number_of_games = 1000000  # Adjust the number of games as needed
+number_of_games = 100  # Adjust the number of games as needed
 games = [(generate_chess_game(),) for _ in range(number_of_games)]
 insert_games_to_db(games)

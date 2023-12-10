@@ -41,7 +41,7 @@ CREATE FUNCTION get_FirstMoves(SAN, integer)
   LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE FUNCTION has_opening(SAN, SAN)
-  RETURNS boolean
+  RETURNS BOOLEAN
   AS 'MODULE_PATHNAME', 'has_opening'
   LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
@@ -51,59 +51,65 @@ CREATE FUNCTION get_board_state(SAN, integer)
   LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE FUNCTION has_Board(SAN, FEN, integer)
-  RETURNS boolean
+  RETURNS BOOLEAN
   AS 'MODULE_PATHNAME', 'has_Board'
   LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 
-CREATE OR REPLACE FUNCTION san_eq(SAN, SAN)
-  RETURNS boolean
-  AS 'MODULE_PATHNAME', 'san_eq'
-  LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+/* B-tree */
 
-CREATE OR REPLACE FUNCTION san_lt(SAN, SAN)
-  RETURNS boolean
-  AS 'MODULE_PATHNAME', 'san_lt'
-  LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+CREATE FUNCTION san_lt(SAN, SAN) 
+    RETURNS BOOLEAN
+    AS 'MODULE_PATHNAME', 'san_lt'
+    LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
-CREATE OR REPLACE FUNCTION san_gt(SAN, SAN)
-  RETURNS boolean
-  AS 'MODULE_PATHNAME', 'san_gt'
-  LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+CREATE FUNCTION san_eq(SAN, SAN) 
+    RETURNS BOOLEAN
+    AS 'MODULE_PATHNAME', 'san_eq'
+    LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
-CREATE OR REPLACE FUNCTION san_cmp(SAN, SAN)
-  RETURNS integer
-  AS 'MODULE_PATHNAME', 'san_cmp'
-  LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+CREATE FUNCTION san_gt(SAN, SAN) 
+    RETURNS BOOLEAN
+    AS 'MODULE_PATHNAME', 'san_gt'
+    LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION san_like(SAN, TEXT) 
   RETURNS BOOLEAN
-  AS 'MODULE_PATHNAME', 'san_like'
+  AS 'MODULE_PATHNAME'
   LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE FUNCTION san_not_like(SAN, TEXT) 
   RETURNS BOOLEAN 
-  AS 'MODULE_PATHNAME', 'san_not_like' 
+  AS 'MODULE_PATHNAME'
   LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
 
-/* Operators */
-
-CREATE OPERATOR = (
-  LEFTARG = SAN, RIGHTARG = SAN,
-  PROCEDURE = san_eq,
-  COMMUTATOR = =, NEGATOR = <>
-);
+CREATE FUNCTION san_cmp(SAN, SAN)
+  RETURNS INTEGER
+  AS 'MODULE_PATHNAME', 'san_cmp'
+  LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OPERATOR < (
-  LEFTARG = SAN, RIGHTARG = SAN,
-  PROCEDURE = san_lt,
-  COMMUTATOR = >, NEGATOR = >=
+    LEFTARG = SAN,
+    RIGHTARG = SAN,
+    PROCEDURE = san_lt,
+    COMMUTATOR = '>',
+    NEGATOR = '>='
+);
+
+CREATE OPERATOR = (
+    LEFTARG = SAN,
+    RIGHTARG = SAN,
+    PROCEDURE = san_eq,
+    COMMUTATOR = '=',
+    NEGATOR = '<>'
 );
 
 CREATE OPERATOR > (
-  LEFTARG = SAN, RIGHTARG = SAN,
-  PROCEDURE = san_gt,
-  COMMUTATOR = <, NEGATOR = <=
+    LEFTARG = SAN,
+    RIGHTARG = SAN,
+    PROCEDURE = san_gt,
+    COMMUTATOR = '<',
+    NEGATOR = '<='
 );
 
 CREATE OPERATOR ~~ (
@@ -119,12 +125,83 @@ CREATE OPERATOR !~~ (
   PROCEDURE = san_not_like
 );
 
-/* BTree Index */
+CREATE OPERATOR CLASS san_ops
+DEFAULT FOR TYPE SAN USING btree AS
+  OPERATOR 1 <,  -- Less than
+  OPERATOR 3 =,  -- Equal
+  OPERATOR 5 >,  -- Greater than
+  FUNCTION 1 san_cmp(SAN, SAN); -- Comparison function
 
-CREATE OPERATOR CLASS san_ops 
-DEFAULT FOR TYPE san 
-USING btree AS
-    OPERATOR 1 <,
-    OPERATOR 3 =,
-    OPERATOR 5 >,
-    FUNCTION 1 san_cmp(san, san);
+
+/* GIN test */
+
+CREATE OR REPLACE FUNCTION gin_compare(internal, internal) 
+  RETURNS internal
+  AS 'MODULE_PATHNAME', 'gin_compare'
+  LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION gin_extract_value(internal, internal, internal)
+  RETURNS internal 
+  AS 'MODULE_PATHNAME', 'gin_extract_value'
+  LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION gin_extract_query(internal, internal, internal, internal, internal, internal, internal)
+  RETURNS internal 
+  AS 'MODULE_PATHNAME', 'gin_extract_query'
+  LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION gin_consistent(internal, internal, internal, internal, internal, internal, internal, internal)
+  RETURNS internal 
+  AS 'MODULE_PATHNAME', 'gin_consistent'
+  LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
+
+CREATE FUNCTION has_board_fn_operator(SAN, FEN)
+  RETURNS boolean
+  AS 'MODULE_PATHNAME', 'has_board_fn_operator'
+  LANGUAGE C STRICT;
+
+CREATE OPERATOR @> (
+    LEFTARG = SAN,
+    RIGHTARG = FEN,
+    PROCEDURE = has_board_fn_operator,
+    commutator = '<@',
+    restrict = contsel,
+    join = contjoinsel
+);
+
+CREATE OPERATOR CLASS san_gin_ops
+DEFAULT FOR TYPE SAN USING gin AS
+    OPERATOR 1 @> (SAN, FEN),
+    FUNCTION 1 gin_compare(internal, internal),
+    FUNCTION 2 gin_extract_value(internal, internal, internal),
+    FUNCTION 3 gin_extract_query(internal, internal, internal, internal, internal, internal, internal),
+    FUNCTION 4 gin_consistent(internal, internal, internal, internal, internal, internal, internal, internal);
+
+
+/*
+CREATE FUNCTION san_contains_fen(SAN, FEN) 
+  RETURNS boolean
+  AS 'MODULE_PATHNAME', 'san_contains_fen'
+  LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
+
+CREATE FUNCTION decompose_san_to_fen(SAN) 
+  RETURNS text[]
+  AS 'MODULE_PATHNAME', 'decompose_san_to_fen'
+  LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
+
+CREATE FUNCTION extract_query(internal, internal, internal, integer, internal, internal)
+  RETURNS internal
+  AS 'MODULE_PATHNAME', 'extract_query'
+  LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
+
+CREATE OPERATOR @> (
+    LEFTARG = SAN,
+    RIGHTARG = FEN,
+    PROCEDURE = san_contains_fen,
+    COMMUTATOR = '<@'
+);
+
+CREATE OPERATOR CLASS san_gin_ops DEFAULT FOR TYPE SAN USING gin AS
+    OPERATOR 2 @>(san, fen),
+    FUNCTION 2 decompose_san_to_fen(SAN);
+*/

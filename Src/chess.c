@@ -11,8 +11,29 @@
 #include <ctype.h>
 #include <string.h>
 #include <stdbool.h>
-#include "libpq/pqformat.h"
+#include "utils/array.h"
+#include <postgresql/libpq-fe.h>
 #include "Utils/mapping_san_to_fan.h"
+#include <catalog/pg_type_d.h>
+
+#include <access/stratnum.h>
+#include <access/gin.h>
+#include <utils/elog.h>
+
+
+static int san_compare(SAN *a, SAN *b)
+{
+    int cmp_result;
+
+    cmp_result =  strncmp(a->data, b->data, MAX_PGN_LENGTH);
+
+    if (cmp_result < 0)
+        return -1;
+    else if (cmp_result > 0)
+        return 1;
+    else
+        return 0;
+}
 
 /**
  * Inputs a SAN string into PostgreSQL.
@@ -131,8 +152,9 @@ Datum fen_out(PG_FUNCTION_ARGS)
  */
 Datum has_opening(PG_FUNCTION_ARGS) 
 {
-    int opening_length;
+    bool result;
     SAN *game1, *game2;
+    int opening_length, full_game_length;
 
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
         ereport(ERROR, (errmsg("has_opening: One of the arguments is null")));
@@ -140,12 +162,15 @@ Datum has_opening(PG_FUNCTION_ARGS)
     game1 = (SAN*)PG_GETARG_POINTER(0);
     game2 = (SAN*)PG_GETARG_POINTER(1);
 
+    full_game_length = strlen(game1->data);
     opening_length = strlen(game2->data);
 
-    if (opening_length > 0 && strncmp(game1->data, game2->data, opening_length) == 0)
-        PG_RETURN_BOOL(true);
+    if (full_game_length < opening_length)
+        ereport(ERROR, (errmsg("has_opening: game is shorter than opening moves")));
 
-    PG_RETURN_BOOL(false);
+     result = (strncmp(game1->data, game2->data, opening_length) == 0);
+
+    PG_RETURN_BOOL(result);
 }
 /**
  * Retrieves the first N half-moves of a chess game.
@@ -209,7 +234,7 @@ Datum get_board_state(PG_FUNCTION_ARGS) {
     if (gameTruncated == NULL)
         ereport(ERROR, (errmsg("Game is incomplete or shorter than the requested number of half-moves")));
 
-    fenConversionStrResult = san_to_fan(gameTruncated);
+    fenConversionStrResult = san_to_fen(gameTruncated);
 
     if (fenConversionStrResult == NULL) {
         ereport(ERROR, (errmsg("No FEN result returned from mapping san to fen")));
@@ -254,11 +279,10 @@ Datum has_Board(PG_FUNCTION_ARGS){
     if (gameTruncated == NULL)
         ereport(ERROR, (errmsg("Game is incomplete or shorter than the requested number of half-moves")));
 
-    fenConversionStrResult = san_to_fan(gameTruncated);
+    fenConversionStrResult = san_to_fen(gameTruncated);
 
-    if (fenConversionStrResult == NULL) {
+    if (fenConversionStrResult == NULL)
         ereport(ERROR, (errmsg("No FEN result returned from mapping san to fen")));
-    }
 
     current_board = (FEN *)palloc(sizeof(FEN));
 
@@ -269,85 +293,87 @@ Datum has_Board(PG_FUNCTION_ARGS){
     PG_RETURN_BOOL(positions_match);
 }
 /**
- * Compares two SAN types for equality.
+ * Determines if one SAN type is less than another.
  *
- * Determines if the game notations of two SAN types are equal up to the first MAX_PGN_LENGTH characters.
- *
- * @param fcinfo Function call info containing arguments.
- * @return Boolean value - true if the two SAN types are equal; false otherwise.
- */
-Datum san_eq(PG_FUNCTION_ARGS) {
-    SAN *san1, *san2;
-
-    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
-        ereport(ERROR, (errmsg("san_eq: One of the arguments is null")));
-
-    san1 = (SAN *) PG_GETARG_POINTER(0);
-    san2 = (SAN *) PG_GETARG_POINTER(1);
-
-    PG_RETURN_BOOL(strncmp(san1->data, san2->data, MAX_PGN_LENGTH) == 0);
-}
-/**
- * Compares two SAN types to determine if the first is less than the second.
- *
- * Compares the game notations of two SAN types up to the first MAX_PGN_LENGTH characters.
+ * Compares two SAN types to check if one is less than the other based on a custom comparison function.
  *
  * @param fcinfo Function call info containing arguments.
  * @return Boolean value - true if the first SAN type is less than the second; false otherwise.
  */
-Datum san_lt(PG_FUNCTION_ARGS) {
-    SAN *san1 , *san2;
+Datum san_lt(PG_FUNCTION_ARGS)
+{
+    SAN *a, *b;
 
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
         ereport(ERROR, (errmsg("san_lt: One of the arguments is null")));
 
-    san1 = (SAN *) PG_GETARG_POINTER(0);
-    san2 = (SAN *) PG_GETARG_POINTER(1);
+    a = (SAN *) PG_GETARG_POINTER(0);
+    b = (SAN *) PG_GETARG_POINTER(1);
 
-    PG_RETURN_BOOL(strncmp(san1->data, san2->data, MAX_PGN_LENGTH) < 0);
+    PG_RETURN_BOOL(san_compare(a, b) < 0);
 }
 /**
- * Compares two SAN types to determine if the first is greater than the second.
+ * Determines if one SAN type is equal to another.
  *
- * Compares the game notations of two SAN types up to the first MAX_PGN_LENGTH characters.
+ * Compares two SAN types to check if they are equal based on a custom comparison function.
+ *
+ * @param fcinfo Function call info containing arguments.
+ * @return Boolean value - true if the two SAN types are equal; false otherwise.
+ */
+Datum san_eq(PG_FUNCTION_ARGS)
+{
+    SAN *a, *b;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+        PG_RETURN_BOOL(false);
+
+    a = (SAN *) PG_GETARG_POINTER(0);
+    b = (SAN *) PG_GETARG_POINTER(1);
+
+    PG_RETURN_BOOL(san_compare(a, b) == 0);
+}
+/**
+ * Determines if one SAN type is greater than another.
+ *
+ * Compares two SAN types to check if one is greater than the other based on a custom comparison function.
  *
  * @param fcinfo Function call info containing arguments.
  * @return Boolean value - true if the first SAN type is greater than the second; false otherwise.
  */
-Datum san_gt(PG_FUNCTION_ARGS) {
-    SAN *san1, *san2;
+Datum san_gt(PG_FUNCTION_ARGS)
+{
+    SAN *a, *b;
 
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
         ereport(ERROR, (errmsg("san_gt: One of the arguments is null")));
 
-    san1 = (SAN *) PG_GETARG_POINTER(0);
-    san2 = (SAN *) PG_GETARG_POINTER(1);
+    a = (SAN *) PG_GETARG_POINTER(0);
+    b = (SAN *) PG_GETARG_POINTER(1);
 
-    PG_RETURN_BOOL(strncmp(san1->data, san2->data, MAX_PGN_LENGTH) > 0);
+    PG_RETURN_BOOL(san_compare(a, b) > 0);
 }
 /**
- * Compares two SAN types.
+ * Compares two SAN types and returns the result of the comparison.
  *
- * Returns an integer indicating the relationship between two SAN types based on their game notations.
- * The comparison is up to the first MAX_PGN_LENGTH characters.
+ * Compares two SAN types based on a custom comparison function and returns the result of the comparison as an integer.
  *
  * @param fcinfo Function call info containing arguments.
- * @return Integer less than, equal to, or greater than zero if the first SAN is found,
- * respectively, to be less than, to match, or be greater than the second SAN.
+ * @return Integer value: 0 if the two SAN types are equal, a positive value if the first is greater, and a negative value if the second is greater.
  */
-Datum san_cmp(PG_FUNCTION_ARGS) {
-    SAN *san1, *san2;
-
-    int cmp;
+Datum san_cmp(PG_FUNCTION_ARGS)
+{
+    SAN *a, *b;
+    int cmp_result;
 
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
         ereport(ERROR, (errmsg("san_cmp: One of the arguments is null")));
 
-    san1 = (SAN *) PG_GETARG_POINTER(0);
-    san2 = (SAN *) PG_GETARG_POINTER(1);
+    a = (SAN *) PG_GETARG_POINTER(0);
+    b = (SAN *) PG_GETARG_POINTER(1);
 
-    cmp = strncmp(san1->data, san2->data, MAX_PGN_LENGTH);
-    PG_RETURN_INT32(cmp);
+    cmp_result = san_compare(a, b);
+
+    PG_RETURN_INT32(cmp_result);
 }
 /**
  * Determines if a SAN type matches a given pattern using the LIKE operation.
@@ -376,6 +402,9 @@ Datum san_like(PG_FUNCTION_ARGS)
                                                    PointerGetDatum(pattern)));
 
     pfree(san_text);
+
+    PG_FREE_IF_COPY(san, 0);
+    PG_FREE_IF_COPY(pattern, 1);
 
     PG_RETURN_BOOL(result);
 }
@@ -407,5 +436,317 @@ Datum san_not_like(PG_FUNCTION_ARGS)
 
     pfree(san_text);
 
+    PG_FREE_IF_COPY(san, 0);
+    PG_FREE_IF_COPY(pattern, 1);
+
     PG_RETURN_BOOL(!like_result);
+}
+
+
+Datum fens_from_san(PG_FUNCTION_ARGS){
+
+    elog(INFO, "Went in the fens_from_san function \n");
+
+    int32 *nkeys;
+    ArrayBuildState *astate;
+    SAN *san, *gameTruncated;
+
+    int i;
+    const char *fenConversionStrResult;
+
+    san = (SAN *) PG_GETARG_POINTER(0);
+    nkeys = (int32 *) PG_GETARG_POINTER(1);
+
+    i = 0;
+    *nkeys = 0;
+    astate = NULL;
+
+    while (true) {
+
+        gameTruncated = truncate_san(san, i);
+
+        elog(INFO, "gameTruncated: %s", gameTruncated->data);
+
+        if (gameTruncated == NULL)
+            break;
+
+        fenConversionStrResult = san_to_fen(gameTruncated);
+
+        elog(INFO, "fenConversionStrResult: %s", fenConversionStrResult);
+
+        if (fenConversionStrResult == NULL)
+            ereport(ERROR, (errmsg("No FEN result returned from mapping san to fen")));
+
+        astate = accumArrayResult(astate, CStringGetTextDatum(fenConversionStrResult),
+                                  false, TEXTOID, CurrentMemoryContext);
+
+        (*nkeys)++;
+        i++;
+    }
+
+    if (*nkeys > 0) {
+
+        Datum *keys = (Datum *) palloc(*nkeys * sizeof(Datum));
+
+        for (i = 0; i < *nkeys; i++) {
+            keys[i] = astate->dvalues[i];
+        }
+
+        PG_RETURN_POINTER(keys);
+
+    } else {
+        PG_RETURN_NULL();
+    }
+}
+
+Datum gin_compare(PG_FUNCTION_ARGS)
+{
+    elog(INFO, "Went in the gin_compare function \n");
+
+    elog(INFO, "gin_compare taking the values from the arguments :  \n");
+
+    text *key1 = PG_GETARG_TEXT_PP(0);
+    text *key2 = PG_GETARG_TEXT_PP(1);
+
+    char *key1Str = text_to_cstring(key1);
+    char *key2Str = text_to_cstring(key2);
+
+    elog(INFO, "gin_compare key1 = %s :\n", key1Str);
+    elog(INFO, "gin_compare key2 = %s :\n", key2Str);
+
+    int32 result = DatumGetInt32(DirectFunctionCall2Coll(btint4cmp,
+                                                        PG_GET_COLLATION(),
+                                                        PointerGetDatum(key1),
+                                                        PointerGetDatum(key2)));
+
+                                                         
+    pfree(key1Str);
+    pfree(key2Str);
+
+    PG_RETURN_INT32(result);
+}
+
+Datum gin_extract_value(PG_FUNCTION_ARGS) {
+
+    elog(INFO, "Went in the gin_extract_value function \n");
+
+    SAN *san;
+    Datum *keys;
+    int32 *nkeys;
+    bool **nullFlags;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
+        ereport(ERROR, (errmsg("gin_extract_value: One of the arguments is null")));
+
+    san = (SAN *) PG_GETARG_POINTER(0);
+    nkeys = (int32 *) PG_GETARG_POINTER(1);
+    nullFlags = (bool **) PG_GETARG_POINTER(2);
+
+    *nkeys = 0;
+
+    keys = (Datum *) DirectFunctionCall4Coll(fens_from_san, 
+                                                    PG_GET_COLLATION(), 
+                                                    PointerGetDatum(san),
+                                                    PointerGetDatum(nkeys),
+                                                    BoolGetDatum(false),
+                                                    PointerGetDatum(NULL)); 
+
+    *nullFlags = NULL;
+
+    PG_RETURN_POINTER(keys);
+}
+
+Datum gin_extract_query(PG_FUNCTION_ARGS) {
+
+    elog(INFO, "Went in the gin_extract_query function \n");
+
+    Datum *keys, query;
+    FEN queryFen;
+    //text *queryFenText;
+    int32 *nkeys, *searchMode;
+
+    char *queryFenStr;
+
+    elog(INFO, "All parameters defined! \n");
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2) || PG_ARGISNULL(3) ||
+        PG_ARGISNULL(4) || PG_ARGISNULL(5) || PG_ARGISNULL(6)) {
+        ereport(ERROR, (errmsg("gin_extract_query: One of the arguments is null")));
+    }
+
+    elog(INFO, "Null checks passed \n");
+
+    query = PG_GETARG_DATUM(0);
+
+    elog(INFO, "query passed! \n");
+
+    SAN  *itemValue =(SAN *) DatumGetPointer(query);
+
+    elog(INFO, "Array typr passed! %s\n", itemValue->data);
+
+    text *queryFenText = DatumGetTextP(query);
+
+    elog(INFO, "After processing query datum");
+
+    char *key1Str = text_to_cstring(queryFenText);
+    elog(INFO, "queryFenText = %s \n", key1Str);
+
+    nkeys = (int32 *) PG_GETARG_POINTER(1);
+    // StrategyNumber strategyNumber = PG_GETARG_UINT16(2); // Unused in this implementation
+    // bool **pmatch = (bool **) PG_GETARG_POINTER(3); // Unused in this implementation
+    // Pointer **extra_data = (Pointer **) PG_GETARG_POINTER(4); // Unused in this implementation
+    // bool **nullFlags = (bool **) PG_GETARG_POINTER(5); // Unused in this implementation
+    searchMode = (int32 *) PG_GETARG_POINTER(6);
+
+    *nkeys = 1;
+    queryFenStr = text_to_cstring(queryFenText);
+
+    parseStr_ToFEN(queryFenStr, &queryFen);
+    pfree(queryFenStr);
+
+    keys = (Datum *) palloc(*nkeys * sizeof(Datum));
+    keys[0] = CStringGetTextDatum(queryFen.positions);
+
+    *searchMode = GIN_SEARCH_MODE_DEFAULT;
+
+    PG_RETURN_POINTER(keys);
+}
+
+Datum gin_consistent(PG_FUNCTION_ARGS)
+{
+    elog(INFO, "Went in the gin_consistent function \n");
+
+    bool *check = (bool *) PG_GETARG_POINTER(0);
+    Datum query = PG_GETARG_DATUM(2);
+    int32 nkeys = PG_GETARG_INT32(3);
+    bool *recheck = (bool *) PG_GETARG_POINTER(5);
+    Datum *queryKeys = (Datum *) PG_GETARG_POINTER(6);
+
+    /* Unused */
+    //StrategyNumber strategyNumber = PG_GETARG_UINT16(1);
+    //Pointer *extra_data = (Pointer *) PG_GETARG_POINTER(4);
+    //bool *nullFlags = (bool *) PG_GETARG_POINTER(7);
+
+    FEN queryFen;
+    char *queryFenStr = text_to_cstring(DatumGetTextP(query));
+    parseStr_ToFEN(queryFenStr, &queryFen);
+    pfree(queryFenStr);
+
+    for (int i = 0; i < nkeys; i++) {
+        if (check[i]) {
+            FEN keyFen;
+            char *keyFenStr = text_to_cstring(DatumGetTextP(queryKeys[i]));
+            parseStr_ToFEN(keyFenStr, &keyFen);
+            pfree(keyFenStr);
+
+            if (strcmp(queryFen.positions, keyFen.positions) == 0) {
+                *recheck = true;
+                PG_RETURN_BOOL(true);
+            }
+        }
+    }
+
+    *recheck = true;
+    PG_RETURN_BOOL(false);
+}
+
+Datum gin_tri_consistent(PG_FUNCTION_ARGS)
+{
+    elog(INFO, "Went in the gin_tri_consistent function \n");
+    GinTernaryValue *check = (GinTernaryValue *) PG_GETARG_POINTER(0);
+    Datum query = PG_GETARG_DATUM(2);
+    int32 nkeys = PG_GETARG_INT32(3);
+    Datum *queryKeys = (Datum *) PG_GETARG_POINTER(5);
+
+    /* Unused */
+    //Pointer *extra_data = (Pointer *) PG_GETARG_POINTER(4);
+    //StrategyNumber strategyNumber = PG_GETARG_UINT16(1);
+    //bool *nullFlags = (bool *) PG_GETARG_POINTER(6);
+
+    GinTernaryValue result = GIN_MAYBE;
+
+    for (int i = 0; i < nkeys; i++) {
+        if (check[i] == GIN_FALSE) 
+            return GIN_FALSE;
+
+        if (check[i] == GIN_TRUE) {
+
+            char *queryFenStr = TextDatumGetCString(queryKeys[i]);
+            char *gameFenStr = TextDatumGetCString(query);
+
+            if (strcmp(queryFenStr, gameFenStr) == 0) 
+                result = GIN_TRUE;
+        }
+    }
+
+    PG_RETURN_GIN_TERNARY_VALUE(result);
+}
+
+Datum has_board_fn_operator(PG_FUNCTION_ARGS)
+{
+    elog(INFO, "Went in the has_board_fn_operator\n");
+
+    FEN *input_fen, *result_fen;
+    SAN *san, *gameTruncated;
+    
+
+    elog(INFO, "parameters defined\n");
+
+    int i;
+    bool result;
+    const char *fenConversionStrResult;
+
+    elog(INFO, "other parameters defined, now going in checking if args are null\n");
+
+     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+        ereport(ERROR, (errmsg("has_board_fn_operator: One of the arguments is null\n")));
+
+    elog(INFO, "checks passed\n");
+
+    result_fen = (FEN *)palloc(sizeof(FEN)); 
+    elog(INFO, "result_fen value = %s \n", result_fen->positions);
+
+    input_fen = (FEN *) PG_GETARG_POINTER(1);
+    elog(INFO, "input_fen value = %s \n", input_fen->positions);
+    
+    san = (SAN *) PG_GETARG_CHESSGAME_P(0);
+    elog(INFO, "san value = %s \n", san->data);
+
+    i=0;
+    result = false;
+
+    elog(INFO, "san value: %s", san->data);
+
+    while (true) {
+
+        gameTruncated = truncate_san(san, i);
+
+        elog(INFO, "gameTruncated: %s", gameTruncated->data);
+
+        if (gameTruncated == NULL)
+            break;
+
+        fenConversionStrResult = san_to_fen(gameTruncated);
+
+        elog(INFO, "fenConversionStrResult: %s", fenConversionStrResult);
+
+        if (fenConversionStrResult == NULL)
+            ereport(ERROR, (errmsg("has_board_fn_operator: No FEN result returned from mapping san to fen")));
+
+        parseStr_ToFEN(fenConversionStrResult, result_fen);
+
+        elog(INFO, "parseStr_ToFEN: %s \n", result_fen->positions);
+
+        elog(INFO, "parseStr_ToFEN: %s \n", input_fen->positions);
+
+        if (strcmp(result_fen->positions, input_fen->positions) == 0)
+        {
+            result = true;
+            break;
+        }
+        
+        i++;
+    }
+
+    PG_RETURN_BOOL(result);
 }

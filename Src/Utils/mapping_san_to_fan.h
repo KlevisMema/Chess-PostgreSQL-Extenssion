@@ -20,7 +20,7 @@
 
 //---------------------------------------------------------------------FUNCTION DECLARATION------------------------------------------------------------------------//
 
-const char* san_to_fan(SAN *gameTruncated);
+const char* san_to_fen(SAN *gameTruncated);
 
 //---------------------------------------------------------------------FUNCTION IMPLEMENTATION---------------------------------------------------------------------//
 
@@ -35,7 +35,7 @@ const char* san_to_fan(SAN *gameTruncated);
  * @return A pointer to a string containing the game in FEN format.
  *         Returns NULL if conversion fails.
  */
-const char* san_to_fan(SAN *gameTruncated) 
+const char* san_to_fen(SAN *gameTruncated) 
 {
     // Initialize variables for Python interaction.
     PyObject *pModule, *pFunc, *pArgs, *pValue;
