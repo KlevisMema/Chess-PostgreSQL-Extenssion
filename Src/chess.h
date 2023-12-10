@@ -100,5 +100,8 @@ Datum gin_tri_consistent(PG_FUNCTION_ARGS);
 PG_FUNCTION_INFO_V1(has_board_fn_operator);
 Datum has_board_fn_operator(PG_FUNCTION_ARGS);
 
+PG_FUNCTION_INFO_V1(fen_in_san_eq);
+Datum fen_in_san_eq(PG_FUNCTION_ARGS);
+
 
 #endif // CHESS_H

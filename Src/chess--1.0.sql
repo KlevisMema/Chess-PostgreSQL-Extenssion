@@ -160,18 +160,32 @@ CREATE FUNCTION has_board_fn_operator(SAN, FEN)
   AS 'MODULE_PATHNAME', 'has_board_fn_operator'
   LANGUAGE C STRICT;
 
+CREATE OR REPLACE FUNCTION fen_in_san_eq(SAN, FEN) 
+  RETURNS BOOLEAN
+  AS 'MODULE_PATHNAME', 'fen_in_san_eq'
+  LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
+
 CREATE OPERATOR @> (
-    LEFTARG = SAN,
-    RIGHTARG = FEN,
-    PROCEDURE = has_board_fn_operator,
-    commutator = '<@',
-    restrict = contsel,
-    join = contjoinsel
+  LEFTARG = SAN,
+  RIGHTARG = FEN,
+  PROCEDURE = has_board_fn_operator,
+  commutator = '<@',
+  restrict = contsel,
+  join = contjoinsel
+);
+
+CREATE OPERATOR = (
+  LEFTARG = SAN,
+  RIGHTARG = FEN,
+  PROCEDURE = fen_in_san_eq,
+  COMMUTATOR = '=',
+  NEGATOR = '<>'
 );
 
 CREATE OPERATOR CLASS san_gin_ops
 DEFAULT FOR TYPE SAN USING gin AS
-    OPERATOR 1 @> (SAN, FEN),
+    OPERATOR 3 = (SAN, FEN),
+    OPERATOR 7 @> (SAN, FEN),
     FUNCTION 1 gin_compare(internal, internal),
     FUNCTION 2 gin_extract_value(internal, internal, internal),
     FUNCTION 3 gin_extract_query(internal, internal, internal, internal, internal, internal, internal),

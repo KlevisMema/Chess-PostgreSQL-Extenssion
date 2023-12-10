@@ -444,9 +444,6 @@ Datum san_not_like(PG_FUNCTION_ARGS)
 
 
 Datum fens_from_san(PG_FUNCTION_ARGS){
-
-    elog(INFO, "Went in the fens_from_san function \n");
-
     int32 *nkeys;
     ArrayBuildState *astate;
     SAN *san, *gameTruncated;
@@ -465,14 +462,10 @@ Datum fens_from_san(PG_FUNCTION_ARGS){
 
         gameTruncated = truncate_san(san, i);
 
-        elog(INFO, "gameTruncated: %s", gameTruncated->data);
-
         if (gameTruncated == NULL)
             break;
 
         fenConversionStrResult = san_to_fen(gameTruncated);
-
-        elog(INFO, "fenConversionStrResult: %s", fenConversionStrResult);
 
         if (fenConversionStrResult == NULL)
             ereport(ERROR, (errmsg("No FEN result returned from mapping san to fen")));
@@ -501,18 +494,11 @@ Datum fens_from_san(PG_FUNCTION_ARGS){
 
 Datum gin_compare(PG_FUNCTION_ARGS)
 {
-    elog(INFO, "Went in the gin_compare function \n");
-
-    elog(INFO, "gin_compare taking the values from the arguments :  \n");
-
     text *key1 = PG_GETARG_TEXT_PP(0);
     text *key2 = PG_GETARG_TEXT_PP(1);
 
     char *key1Str = text_to_cstring(key1);
     char *key2Str = text_to_cstring(key2);
-
-    elog(INFO, "gin_compare key1 = %s :\n", key1Str);
-    elog(INFO, "gin_compare key2 = %s :\n", key2Str);
 
     int32 result = DatumGetInt32(DirectFunctionCall2Coll(btint4cmp,
                                                         PG_GET_COLLATION(),
@@ -527,8 +513,6 @@ Datum gin_compare(PG_FUNCTION_ARGS)
 }
 
 Datum gin_extract_value(PG_FUNCTION_ARGS) {
-
-    elog(INFO, "Went in the gin_extract_value function \n");
 
     SAN *san;
     Datum *keys;
@@ -558,54 +542,23 @@ Datum gin_extract_value(PG_FUNCTION_ARGS) {
 
 Datum gin_extract_query(PG_FUNCTION_ARGS) {
 
-    elog(INFO, "Went in the gin_extract_query function \n");
-
+    FEN  *itemValue;
     Datum *keys, query;
-    FEN queryFen;
-    //text *queryFenText;
     int32 *nkeys, *searchMode;
-
-    char *queryFenStr;
-
-    elog(INFO, "All parameters defined! \n");
 
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2) || PG_ARGISNULL(3) ||
         PG_ARGISNULL(4) || PG_ARGISNULL(5) || PG_ARGISNULL(6)) {
         ereport(ERROR, (errmsg("gin_extract_query: One of the arguments is null")));
     }
 
-    elog(INFO, "Null checks passed \n");
-
     query = PG_GETARG_DATUM(0);
-
-    elog(INFO, "query passed! \n");
-
-    SAN  *itemValue =(SAN *) DatumGetPointer(query);
-
-    elog(INFO, "Array typr passed! %s\n", itemValue->data);
-
-    text *queryFenText = DatumGetTextP(query);
-
-    elog(INFO, "After processing query datum");
-
-    char *key1Str = text_to_cstring(queryFenText);
-    elog(INFO, "queryFenText = %s \n", key1Str);
-
     nkeys = (int32 *) PG_GETARG_POINTER(1);
-    // StrategyNumber strategyNumber = PG_GETARG_UINT16(2); // Unused in this implementation
-    // bool **pmatch = (bool **) PG_GETARG_POINTER(3); // Unused in this implementation
-    // Pointer **extra_data = (Pointer **) PG_GETARG_POINTER(4); // Unused in this implementation
-    // bool **nullFlags = (bool **) PG_GETARG_POINTER(5); // Unused in this implementation
+    itemValue =(FEN *) DatumGetPointer(query);
     searchMode = (int32 *) PG_GETARG_POINTER(6);
 
     *nkeys = 1;
-    queryFenStr = text_to_cstring(queryFenText);
-
-    parseStr_ToFEN(queryFenStr, &queryFen);
-    pfree(queryFenStr);
-
     keys = (Datum *) palloc(*nkeys * sizeof(Datum));
-    keys[0] = CStringGetTextDatum(queryFen.positions);
+    keys[0] = CStringGetTextDatum(itemValue->positions);
 
     *searchMode = GIN_SEARCH_MODE_DEFAULT;
 
@@ -614,18 +567,11 @@ Datum gin_extract_query(PG_FUNCTION_ARGS) {
 
 Datum gin_consistent(PG_FUNCTION_ARGS)
 {
-    elog(INFO, "Went in the gin_consistent function \n");
-
     bool *check = (bool *) PG_GETARG_POINTER(0);
     Datum query = PG_GETARG_DATUM(2);
     int32 nkeys = PG_GETARG_INT32(3);
     bool *recheck = (bool *) PG_GETARG_POINTER(5);
     Datum *queryKeys = (Datum *) PG_GETARG_POINTER(6);
-
-    /* Unused */
-    //StrategyNumber strategyNumber = PG_GETARG_UINT16(1);
-    //Pointer *extra_data = (Pointer *) PG_GETARG_POINTER(4);
-    //bool *nullFlags = (bool *) PG_GETARG_POINTER(7);
 
     FEN queryFen;
     char *queryFenStr = text_to_cstring(DatumGetTextP(query));
@@ -652,16 +598,10 @@ Datum gin_consistent(PG_FUNCTION_ARGS)
 
 Datum gin_tri_consistent(PG_FUNCTION_ARGS)
 {
-    elog(INFO, "Went in the gin_tri_consistent function \n");
     GinTernaryValue *check = (GinTernaryValue *) PG_GETARG_POINTER(0);
     Datum query = PG_GETARG_DATUM(2);
     int32 nkeys = PG_GETARG_INT32(3);
     Datum *queryKeys = (Datum *) PG_GETARG_POINTER(5);
-
-    /* Unused */
-    //Pointer *extra_data = (Pointer *) PG_GETARG_POINTER(4);
-    //StrategyNumber strategyNumber = PG_GETARG_UINT16(1);
-    //bool *nullFlags = (bool *) PG_GETARG_POINTER(6);
 
     GinTernaryValue result = GIN_MAYBE;
 
@@ -684,62 +624,83 @@ Datum gin_tri_consistent(PG_FUNCTION_ARGS)
 
 Datum has_board_fn_operator(PG_FUNCTION_ARGS)
 {
-    elog(INFO, "Went in the has_board_fn_operator\n");
-
     FEN *input_fen, *result_fen;
     SAN *san, *gameTruncated;
     
-
-    elog(INFO, "parameters defined\n");
-
     int i;
     bool result;
     const char *fenConversionStrResult;
 
-    elog(INFO, "other parameters defined, now going in checking if args are null\n");
-
-     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
         ereport(ERROR, (errmsg("has_board_fn_operator: One of the arguments is null\n")));
 
-    elog(INFO, "checks passed\n");
-
     result_fen = (FEN *)palloc(sizeof(FEN)); 
-    elog(INFO, "result_fen value = %s \n", result_fen->positions);
-
     input_fen = (FEN *) PG_GETARG_POINTER(1);
-    elog(INFO, "input_fen value = %s \n", input_fen->positions);
-    
     san = (SAN *) PG_GETARG_CHESSGAME_P(0);
-    elog(INFO, "san value = %s \n", san->data);
 
     i=0;
     result = false;
 
-    elog(INFO, "san value: %s", san->data);
-
     while (true) {
 
         gameTruncated = truncate_san(san, i);
-
-        elog(INFO, "gameTruncated: %s", gameTruncated->data);
 
         if (gameTruncated == NULL)
             break;
 
         fenConversionStrResult = san_to_fen(gameTruncated);
 
-        elog(INFO, "fenConversionStrResult: %s", fenConversionStrResult);
+        if (fenConversionStrResult == NULL)
+            ereport(ERROR, (errmsg("has_board_fn_operator: No FEN result returned from mapping san to fen")));
+
+        parseStr_ToFEN(fenConversionStrResult, result_fen);
+
+        if (strcmp(result_fen->positions, input_fen->positions) == 0)
+        {
+            result = true;
+            break;
+        }
+        
+        i++;
+    }
+
+    PG_RETURN_BOOL(result);
+}
+
+Datum fen_in_san_eq(PG_FUNCTION_ARGS) {
+
+    FEN *input_board, *result_fen;
+    SAN *input_game, *gameTruncated;
+
+    int i;
+    bool result;
+    const char *fenConversionStrResult;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+        ereport(ERROR, (errmsg("fen_in_san_eq: One of the arguments is null\n")));
+
+    i=0;
+    result = false;
+    result_fen = (FEN *)palloc(sizeof(FEN));
+    input_game = (SAN *)PG_GETARG_POINTER(1);
+    input_board = (FEN *)PG_GETARG_POINTER(0);
+
+
+    while (true) {
+
+        gameTruncated = truncate_san(input_game, i);
+
+        if (gameTruncated == NULL)
+            break;
+
+        fenConversionStrResult = san_to_fen(gameTruncated);
 
         if (fenConversionStrResult == NULL)
             ereport(ERROR, (errmsg("has_board_fn_operator: No FEN result returned from mapping san to fen")));
 
         parseStr_ToFEN(fenConversionStrResult, result_fen);
 
-        elog(INFO, "parseStr_ToFEN: %s \n", result_fen->positions);
-
-        elog(INFO, "parseStr_ToFEN: %s \n", input_fen->positions);
-
-        if (strcmp(result_fen->positions, input_fen->positions) == 0)
+        if (strcmp(result_fen->positions, input_board->positions) == 0)
         {
             result = true;
             break;
