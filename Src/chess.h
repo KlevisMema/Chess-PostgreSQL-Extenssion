@@ -71,6 +71,12 @@ Datum san_gt(PG_FUNCTION_ARGS);
 PG_FUNCTION_INFO_V1(san_cmp);
 Datum san_cmp(PG_FUNCTION_ARGS);
 
+PG_FUNCTION_INFO_V1(san_gt_eq);
+Datum san_gt_eq(PG_FUNCTION_ARGS);
+
+PG_FUNCTION_INFO_V1(san_lt_eq);
+Datum san_lt_eq(PG_FUNCTION_ARGS);
+
 PG_FUNCTION_INFO_V1(san_like);
 Datum san_like(PG_FUNCTION_ARGS);
 

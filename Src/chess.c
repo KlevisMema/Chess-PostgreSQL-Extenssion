@@ -11,16 +11,26 @@
 #include <ctype.h>
 #include <string.h>
 #include <stdbool.h>
-#include "utils/array.h"
-#include <postgresql/libpq-fe.h>
-#include "Utils/mapping_san_to_fan.h"
-#include <catalog/pg_type_d.h>
-
-#include <access/stratnum.h>
 #include <access/gin.h>
-#include <utils/elog.h>
+#include "utils/array.h"
+#include <catalog/pg_type_d.h>
+#include "Utils/mapping_san_to_fan.h"
 
-
+/**
+ * Compares two SAN (Standard Algebraic Notation) structures.
+ *
+ * This function compares two SAN structures using string comparison. It uses strncmp 
+ * to compare the data fields of two SAN structures up to MAX_PGN_LENGTH characters. 
+ * The comparison is performed lexicographically. The function normalizes the return 
+ * value to -1, 0, or 1 to indicate the result of the comparison: less than, equal to, 
+ * or greater than, respectively. This normalized result is useful for various sorting 
+ * and searching algorithms, especially those used in B-tree operations.
+ *
+ * @param a A pointer to the first SAN structure.
+ * @param b A pointer to the second SAN structure.
+ * @return An integer value: -1 if 'a' is less than 'b', 1 if 'a' is greater than 'b',
+ *         or 0 if 'a' and 'b' are equal.
+ */
 static int san_compare(SAN *a, SAN *b)
 {
     int cmp_result;
@@ -34,7 +44,6 @@ static int san_compare(SAN *a, SAN *b)
     else
         return 0;
 }
-
 /**
  * Inputs a SAN string into PostgreSQL.
  *
@@ -59,6 +68,8 @@ Datum san_in(PG_FUNCTION_ARGS)
 
     parseStr_ToPGN(pgn_str, result);
 
+    PG_FREE_IF_COPY(pgn_str, 0);
+
     PG_RETURN_POINTER(result);
 }
 /**
@@ -82,6 +93,8 @@ Datum san_out(PG_FUNCTION_ARGS)
     game = PG_GETARG_CHESSGAME_P(0);
 
     parsePGN_ToStr(game, &result);
+
+    PG_FREE_IF_COPY(game, 0);
 
     PG_RETURN_CSTRING(result);
 }
@@ -114,6 +127,8 @@ Datum fen_in(PG_FUNCTION_ARGS)
 
     parseStr_ToFEN(str, result);
 
+    PG_FREE_IF_COPY(str, 0);
+
     PG_RETURN_POINTER(result);
 }
 /**
@@ -137,6 +152,8 @@ Datum fen_out(PG_FUNCTION_ARGS)
     cb = (FEN *)PG_GETARG_POINTER(0);
 
     result = parseFEN_ToStr(cb);
+
+    PG_FREE_IF_COPY(cb, 0);
 
     PG_RETURN_CSTRING(pstrdup(result));
 }
@@ -168,7 +185,10 @@ Datum has_opening(PG_FUNCTION_ARGS)
     if (full_game_length < opening_length)
         ereport(ERROR, (errmsg("has_opening: game is shorter than opening moves")));
 
-     result = (strncmp(game1->data, game2->data, opening_length) == 0);
+    result = (strncmp(game1->data, game2->data, opening_length) == 0);
+
+    PG_FREE_IF_COPY(game1, 0);
+    PG_FREE_IF_COPY(game2, 1);
 
     PG_RETURN_BOOL(result);
 }
@@ -201,6 +221,8 @@ Datum get_FirstMoves(PG_FUNCTION_ARGS)
     if (result == NULL)
         ereport(ERROR, (errmsg("Game is incomplete or shorter than the requested number of half-moves")));
 
+    PG_FREE_IF_COPY(inputGame, 0);
+
     PG_RETURN_POINTER(result);
 }
 /**
@@ -232,17 +254,19 @@ Datum get_board_state(PG_FUNCTION_ARGS) {
     gameTruncated = truncate_san(game, half_moves); 
 
     if (gameTruncated == NULL)
-        ereport(ERROR, (errmsg("Game is incomplete or shorter than the requested number of half-moves")));
+        ereport(ERROR, (errmsg("get_board_state: Game is incomplete or shorter than the requested number of half-moves")));
 
     fenConversionStrResult = san_to_fen(gameTruncated);
 
     if (fenConversionStrResult == NULL) {
-        ereport(ERROR, (errmsg("No FEN result returned from mapping san to fen")));
+        ereport(ERROR, (errmsg("get_board_state: No FEN result returned from mapping san to fen")));
     }
 
     fen = (FEN *)palloc(sizeof(FEN));
 
     parseStr_ToFEN(fenConversionStrResult, fen);
+
+    PG_FREE_IF_COPY(game, 0);
 
     PG_RETURN_POINTER(fen);
 }
@@ -267,9 +291,6 @@ Datum has_Board(PG_FUNCTION_ARGS){
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
         ereport(ERROR, (errmsg("has_Board: One of the arguments is null")));
 
-   
-        
-
     input_game = (SAN*) PG_GETARG_POINTER(0);
     input_board = (FEN*) PG_GETARG_POINTER(1);
     input_half_moves = PG_GETARG_INT32(2);
@@ -293,6 +314,9 @@ Datum has_Board(PG_FUNCTION_ARGS){
 
     positions_match = strcmp(input_board->positions, current_board->positions) == 0;
 
+    PG_FREE_IF_COPY(input_game, 0);
+    PG_FREE_IF_COPY(input_board, 1);
+
     PG_RETURN_BOOL(positions_match);
 }
 /**
@@ -306,6 +330,7 @@ Datum has_Board(PG_FUNCTION_ARGS){
 Datum san_lt(PG_FUNCTION_ARGS)
 {
     SAN *a, *b;
+    bool result;
 
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
         ereport(ERROR, (errmsg("san_lt: One of the arguments is null")));
@@ -313,7 +338,12 @@ Datum san_lt(PG_FUNCTION_ARGS)
     a = (SAN *) PG_GETARG_POINTER(0);
     b = (SAN *) PG_GETARG_POINTER(1);
 
-    PG_RETURN_BOOL(san_compare(a, b) < 0);
+    result = san_compare(a, b) > 0;
+
+    PG_FREE_IF_COPY(a, 0);
+    PG_FREE_IF_COPY(b, 1);
+
+    PG_RETURN_BOOL(result);
 }
 /**
  * Determines if one SAN type is equal to another.
@@ -326,6 +356,7 @@ Datum san_lt(PG_FUNCTION_ARGS)
 Datum san_eq(PG_FUNCTION_ARGS)
 {
     SAN *a, *b;
+    bool result;
 
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
         PG_RETURN_BOOL(false);
@@ -333,7 +364,12 @@ Datum san_eq(PG_FUNCTION_ARGS)
     a = (SAN *) PG_GETARG_POINTER(0);
     b = (SAN *) PG_GETARG_POINTER(1);
 
-    PG_RETURN_BOOL(san_compare(a, b) == 0);
+    result = san_compare(a, b) == 0;
+
+    PG_FREE_IF_COPY(a, 0);
+    PG_FREE_IF_COPY(b, 1);
+
+    PG_RETURN_BOOL(result);
 }
 /**
  * Determines if one SAN type is greater than another.
@@ -346,6 +382,7 @@ Datum san_eq(PG_FUNCTION_ARGS)
 Datum san_gt(PG_FUNCTION_ARGS)
 {
     SAN *a, *b;
+    bool result;
 
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
         ereport(ERROR, (errmsg("san_gt: One of the arguments is null")));
@@ -353,7 +390,64 @@ Datum san_gt(PG_FUNCTION_ARGS)
     a = (SAN *) PG_GETARG_POINTER(0);
     b = (SAN *) PG_GETARG_POINTER(1);
 
-    PG_RETURN_BOOL(san_compare(a, b) > 0);
+    result = san_compare(a, b) > 0;
+
+    PG_FREE_IF_COPY(a, 0);
+    PG_FREE_IF_COPY(b, 1);
+
+    PG_RETURN_BOOL(result);
+}
+/**
+ * Determines if one SAN type is greater or equal than another.
+ *
+ * Compares two SAN types to check if one is greater or qeual than the other based on a custom comparison function.
+ *
+ * @param fcinfo Function call info containing arguments.
+ * @return Boolean value - true if the first SAN type is greater or equal than the second; false otherwise.
+ */
+Datum san_gt_eq(PG_FUNCTION_ARGS)
+{
+    SAN *a, *b;
+    bool result;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+        ereport(ERROR, (errmsg("san_gt_eq: One of the arguments is null")));
+
+    a = (SAN *) PG_GETARG_POINTER(0);
+    b = (SAN *) PG_GETARG_POINTER(1);
+
+    result = san_compare(a, b) >= 0;
+
+    PG_FREE_IF_COPY(a, 0);
+    PG_FREE_IF_COPY(b, 1);
+
+    PG_RETURN_BOOL(result);
+}
+/**
+ * Determines if one SAN type is less or equal than another.
+ *
+ * Compares two SAN types to check if one is less or equal than the other based on a custom comparison function.
+ *
+ * @param fcinfo Function call info containing arguments.
+ * @return Boolean value - true if the first SAN type is less or equal than the second; false otherwise.
+ */
+Datum san_lt_eq(PG_FUNCTION_ARGS)
+{
+    SAN *a, *b;
+    bool result;
+
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+        ereport(ERROR, (errmsg("san_gt_eq: One of the arguments is null")));
+
+    a = (SAN *) PG_GETARG_POINTER(0);
+    b = (SAN *) PG_GETARG_POINTER(1);
+
+    result = san_compare(a, b) <= 0;
+
+    PG_FREE_IF_COPY(a, 0);
+    PG_FREE_IF_COPY(b, 1);    
+
+    PG_RETURN_BOOL(result);
 }
 /**
  * Compares two SAN types and returns the result of the comparison.
@@ -375,6 +469,9 @@ Datum san_cmp(PG_FUNCTION_ARGS)
     b = (SAN *) PG_GETARG_POINTER(1);
 
     cmp_result = san_compare(a, b);
+
+    PG_FREE_IF_COPY(a, 0);
+    PG_FREE_IF_COPY(b, 1);    
 
     PG_RETURN_INT32(cmp_result);
 }
@@ -488,6 +585,8 @@ Datum fens_from_san(PG_FUNCTION_ARGS){
         i++;
     }
 
+    PG_FREE_IF_COPY(san, 0);
+
     if (*nkeys > 0) {
 
         Datum *keys = (Datum *) palloc(*nkeys * sizeof(Datum));
@@ -528,6 +627,9 @@ Datum gin_compare(PG_FUNCTION_ARGS)
     pfree(key1Str);
     pfree(key2Str);
 
+    PG_FREE_IF_COPY(key1, 0);
+    PG_FREE_IF_COPY(key2, 1);
+
     PG_RETURN_INT32(result);
 }
 /**
@@ -563,6 +665,8 @@ Datum gin_extract_value(PG_FUNCTION_ARGS) {
                                             PointerGetDatum(NULL)); 
 
     *nullFlags = NULL;
+
+    PG_FREE_IF_COPY(san, 0);
 
     PG_RETURN_POINTER(keys);
 }
@@ -693,9 +797,9 @@ Datum has_board_fn_operator(PG_FUNCTION_ARGS)
     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
         ereport(ERROR, (errmsg("has_board_fn_operator: One of the arguments is null\n")));
 
-    san = (SAN *) PG_GETARG_CHESSGAME_P(0);
     result_fen = (FEN *)palloc(sizeof(FEN)); 
     input_fen = (FEN *) PG_GETARG_POINTER(1);
+    san = (SAN *) PG_GETARG_CHESSGAME_P(0);
 
     i=0;
     result = false;
@@ -751,7 +855,6 @@ Datum fen_in_san_eq(PG_FUNCTION_ARGS) {
     result_fen = (FEN *)palloc(sizeof(FEN));
     input_game = (SAN *)PG_GETARG_POINTER(1);
     input_board = (FEN *)PG_GETARG_POINTER(0);
-
 
     while (true) {
 
